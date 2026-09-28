@@ -1,4 +1,3 @@
-import com.adarshr.gradle.testlogger.theme.ThemeType
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel.*
@@ -18,7 +17,6 @@ plugins {
     alias(libs.plugins.kotlin) // Kotlin support
     alias(libs.plugins.gradleIntelliJPlugin) // Gradle IntelliJ Plugin
     alias(libs.plugins.changelog) // Gradle Changelog Plugin
-    alias(libs.plugins.testLogger) // Nice test logs
     alias(libs.plugins.kover) // Gradle Kover Plugin
     jacoco // Code coverage
 }
@@ -49,16 +47,13 @@ repositories {
     }
 }
 
-val lsp: Configuration by configurations.creating
-
 // Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/platforms.html#sub:version-catalog
 dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        // Disabling the installer dependency since IntelliJ 253 (2025.3.x) and potentially other
-        // early access/snapshot versions may lack direct installer packages in the artifact repositories.
-        create(properties("platformType"), properties("platformVersion"), useInstaller = false)
+        // Local Factorio builds use the installed IDEA 262 SDK.
+        local(providers.gradleProperty("ideaPath").get())
 
         // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
         // starting from 2024.3, all json related code is know on its own plugin
@@ -72,6 +67,7 @@ dependencies {
         }
         println("use bundled Plugins: $platformBundledPlugins")
         bundledPlugins(platformBundledPlugins)
+        bundledPlugin("intellij.structureView.plugin")
 
         // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file for plugin from JetBrains Marketplace.
         plugins(properties("platformPlugins").map { it.split(',') })
@@ -116,7 +112,7 @@ dependencies {
 // Output compatibility and API usage are restricted to Java 17 in the tasks below.
 kotlin {
     jvmToolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(providers.gradleProperty("buildJavaVersion").orElse("21").get().toInt())
         vendor = JvmVendorSpec.JETBRAINS
     }
 }
@@ -140,6 +136,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
 intellijPlatform {
     pluginConfiguration {
         name = properties("pluginName")
+        changeNotes = "Local Factorio build of upstream main with per-source breakpoint removal fix."
 
         // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
         description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
@@ -201,26 +198,6 @@ configurations {
     }
 }
 
-testlogger {
-    theme = ThemeType.STANDARD
-    showExceptions = true
-    showStackTraces = true
-    showFullStackTraces = false
-    showCauses = true
-    slowThreshold = 2000
-    showSummary = true
-    showSimpleNames = false
-    showPassed = true
-    showSkipped = true
-    showFailed = true
-    showOnlySlow = false
-    showStandardStreams = false
-    showPassedStandardStreams = true
-    showSkippedStandardStreams = true
-    showFailedStandardStreams = true
-    logLevel = LogLevel.LIFECYCLE
-}
-
 // Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
 changelog {
     groups.empty()
@@ -274,5 +251,13 @@ tasks {
 
     check {
         dependsOn(jacocoTestReport)
+    }
+}
+
+// IDEA 262 loads its filesystem provider from a separate boot jar.
+if (providers.gradleProperty("ideaPath").isPresent) {
+    tasks.test {
+        systemProperty("idea.load.plugins.id", "com.redhat.devtools.lsp4ij")
+        jvmArgs("-Xbootclasspath/a:" + file(providers.gradleProperty("ideaPath").get()).resolve("Contents/lib/nio-fs.jar"))
     }
 }
