@@ -2,10 +2,10 @@
 
 Build branch: `work/factorio-build`, checked out under
 `upstream/lsp4ij/build/checkouts/patched`. This branch includes upstream main
-`4796cf99` and `fix/file-scoped-formatting` (`a0b68b10`), plus local IDEA 262
+`4796cf99` and `fix/file-scoped-formatting` (`4ef6aa5c`), plus local IDEA 262
 build support. The contribution branch contains only the selection fix and tests.
 
-Current archive: `lsp4ij-0.21.1-SNAPSHOT-factorio-formatting-patched.zip`.
+Current archive: `lsp4ij-0.21.1-SNAPSHOT-factorio-formatting-patched2.zip`.
 Use JDK 25, the shared Gradle cache under `dev/cache/gradle`, and an isolated
 Java home/temp directory under `dev/`. Supply `-PideaPath=/path/to/IntelliJ\ IDEA.app`,
 `-PbuildJavaVersion=25`, and
@@ -30,3 +30,19 @@ On the local IDEA 262 SDK, the 66-test formatting/lifecycle/DAP selection has
 automatic indentation failures remain; the patch introduces no new failures.
 Comparison evidence is in the fix worktree's `build/reports/file-scoped-comparison.json`.
 The passing formatter, lifecycle and DAP tests are run for the local release.
+
+## Review follow-up (2026-10-08)
+
+PR #1688 follow-up `4ef6aa5c` shares the matching predicate between both methods
+and checks for a missing virtual file before consulting client enablement. The
+filter parameter remains non-null; `processLanguageServers` passes an accepting
+predicate. Five file-enablement tests now cover missing virtual files and filter
+rejection as well as ownership and formatting. All 19 selected regression tests
+pass on the independent fix branch. No CI/toolchain changes are in the PR.
+
+The original PR's Windows CI passed all 456 tests (three skipped), including the
+four original regressions. Linux/macOS, archive building and verification failed
+before compilation because automatic provisioning could not supply JetBrains
+Runtime 21. This is independent of the patch. The broader local IDEA 262 failures
+above remain the previous comparison; that suite was not repeated for this small
+review follow-up. Local logs use `build/logs/file-scoped-review-*`.
