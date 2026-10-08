@@ -136,7 +136,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
 intellijPlatform {
     pluginConfiguration {
         name = properties("pluginName")
-        changeNotes = "Local Factorio build of upstream main with per-source breakpoint removal fix."
+        changeNotes = "Local Factorio build of upstream main with file-scoped language server selection."
 
         // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
         description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
