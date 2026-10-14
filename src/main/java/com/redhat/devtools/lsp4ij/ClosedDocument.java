@@ -33,8 +33,8 @@ import static com.redhat.devtools.lsp4ij.features.diagnostics.LSPDiagnosticUtils
 public class ClosedDocument extends LSPDocumentBase {
 
     private final Map<String, List<Diagnostic>> diagnosticsPerIdentifier = new HashMap<>();
-    private volatile List<Diagnostic> diagnostics = List.of();
-    private volatile boolean hasErrors;
+    // Publish the diagnostics and their derived error status together.
+    private volatile DiagnosticSnapshot snapshot = new DiagnosticSnapshot(List.of(), false);
 
     @Override
     public synchronized boolean updateDiagnostics(@NotNull String identifier,
@@ -45,21 +45,24 @@ public class ClosedDocument extends LSPDocumentBase {
             diagnosticsPerIdentifier.put(identifier, List.copyOf(diagnostics));
         }
         var combined = diagnosticsPerIdentifier.values().stream().flatMap(List::stream).distinct().toList();
-        boolean changed = isDiagnosticsChanged(this.diagnostics, combined);
-        this.diagnostics = combined;
-        hasErrors = combined
+        boolean changed = isDiagnosticsChanged(snapshot.diagnostics(), combined);
+        boolean hasErrors = combined
                 .stream()
                 .anyMatch(diagnostic -> diagnostic.getSeverity() != null && diagnostic.getSeverity() == DiagnosticSeverity.Error);
+        snapshot = new DiagnosticSnapshot(combined, hasErrors);
         return changed;
     }
 
     @Override
     public Collection<Diagnostic> getDiagnostics() {
-        return diagnostics;
+        return snapshot.diagnostics();
     }
 
     @Override
     public boolean hasErrors() {
-        return hasErrors;
+        return snapshot.hasErrors();
+    }
+
+    private record DiagnosticSnapshot(List<Diagnostic> diagnostics, boolean hasErrors) {
     }
 }

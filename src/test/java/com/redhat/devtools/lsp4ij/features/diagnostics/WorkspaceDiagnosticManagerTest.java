@@ -179,13 +179,25 @@ public class WorkspaceDiagnosticManagerTest {
     @Test
     public void closedFileReportsFromDifferentProvidersDoNotOverwriteEachOther() {
         var document = new com.redhat.devtools.lsp4ij.ClosedDocument();
+        assertTrue(document.getDiagnostics().isEmpty());
+        assertFalse(document.hasErrors());
         var first = new Diagnostic(new Range(new Position(0, 0), new Position(0, 1)), "first");
+        first.setSeverity(DiagnosticSeverity.Error);
         var second = new Diagnostic(new Range(new Position(0, 0), new Position(0, 1)), "second");
+        second.setSeverity(DiagnosticSeverity.Warning);
         document.updateDiagnostics("first", List.of(first), null);
+        assertTrue(document.hasErrors());
         document.updateDiagnostics("second", List.of(second), null);
         assertEquals(Set.of(first, second), new HashSet<>(document.getDiagnostics()));
+        assertTrue(document.hasErrors());
+        var previousDiagnostics = document.getDiagnostics();
         document.updateDiagnostics("first", List.of(), null);
         assertEquals(List.of(second), new ArrayList<>(document.getDiagnostics()));
+        assertFalse(document.hasErrors());
+        assertEquals(Set.of(first, second), new HashSet<>(previousDiagnostics));
+        document.updateDiagnostics("second", List.of(), null);
+        assertTrue(document.getDiagnostics().isEmpty());
+        assertFalse(document.hasErrors());
     }
 
     private static ResponseErrorException cancelled(Object data) {
