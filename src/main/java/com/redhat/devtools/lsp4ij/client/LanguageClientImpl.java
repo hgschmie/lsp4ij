@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 /**
@@ -122,6 +123,23 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
         VirtualFile file = FileUriSupport.findFileByUri(uri, features);
         if (file == null || !ReadAction.compute(() -> !isDisposed() && file.isValid() && features.isEnabled(file))) {
             return false;
+        }
+        // A server may report every workspace file, including files routed to
+        // another server by a DocumentMatcher. Feature enablement alone is not
+        // sufficient: most clients keep its default (true).
+        var matched = LanguageServiceAccessor.getInstance(project).isFileMappedToServer(file, getServerDefinition());
+        try {
+            // This callback runs on the workspace-diagnostic executor, never the
+            // EDT/RPC reader. Await async matchers without holding a read lock.
+            if (!matched.get()) {
+                return false;
+            }
+        } catch (InterruptedException e) {
+            matched.cancel(true);
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (ExecutionException e) {
+            throw new java.util.concurrent.CompletionException(e.getCause());
         }
         if (isDisposed()) {
             return false;

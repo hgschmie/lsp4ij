@@ -17,6 +17,7 @@ import com.redhat.devtools.lsp4ij.client.features.LSPClientFeatures;
 import com.redhat.devtools.lsp4ij.fixtures.LSPCodeInsightTestFixture;
 import com.redhat.devtools.lsp4ij.fixtures.LSPTestFixtureFactory;
 import com.redhat.devtools.lsp4ij.mock.MockLanguageServerDefinition;
+import com.redhat.devtools.lsp4ij.server.definition.ServerFileNamePatternMapping;
 import com.redhat.devtools.lsp4ij.templates.ServerMappingSettings;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
@@ -77,6 +78,45 @@ public class WorkspaceDiagnosticsTest extends UsefulTestCase {
         assertNull(wrapper.getClosedDocument(LSPIJUtils.toUri(foreign), false));
         stream(request, report(owned, null, null));
         await(() -> wrapper.getClosedDocument(LSPIJUtils.toUri(owned), false).getDiagnostics().isEmpty());
+    }
+
+    public void testWorkspaceReportsRespectDocumentMatcher() throws Exception {
+        definition.allFilesEnabled = true; // routing is supplied only by DocumentMatcher
+        LanguageServersRegistry.getInstance().registerAssociation(definition,
+                new ServerFileNamePatternMapping(List.of("*.routed"), definition.getId(), null,
+                        (file, project) -> file.getName().equals("owned.routed")));
+        var owned = fixture.addFileToProject("owned.routed", "value").getVirtualFile();
+        var rejected = fixture.addFileToProject("other.routed", "value").getVirtualFile();
+        start(true);
+        var request = next();
+        stream(request, report(rejected, "must not leak", null), report(owned, "owned", null));
+        request.future.complete(new WorkspaceDiagnosticReport(List.of()));
+        next(); // prior streamed reports have been consumed
+        assertNotNull(wrapper.getClosedDocument(LSPIJUtils.toUri(owned), false));
+        assertNull(wrapper.getClosedDocument(LSPIJUtils.toUri(rejected), false));
+        assertNull(wrapper.getOpenedDocument(LSPIJUtils.toUri(owned))); // never connect to filter
+    }
+
+    public void testWorkspaceReportsRespectAsyncDocumentMatcher() throws Exception {
+        definition.allFilesEnabled = true;
+        LanguageServersRegistry.getInstance().registerAssociation(definition,
+                new ServerFileNamePatternMapping(List.of("*.routed"), definition.getId(), null, new DocumentMatcher() {
+                    @Override public boolean match(@NotNull VirtualFile file, @NotNull Project project) {
+                        throw new AssertionError("Async matcher must use matchAsync");
+                    }
+                    @Override public boolean shouldBeMatchedAsynchronously(@NotNull Project project) { return true; }
+                    @Override public @NotNull CompletableFuture<Boolean> matchAsync(@NotNull VirtualFile file, @NotNull Project project) {
+                        return CompletableFuture.completedFuture(file.getName().equals("owned.routed"));
+                    }
+                }));
+        var owned = fixture.addFileToProject("owned.routed", "value").getVirtualFile();
+        var rejected = fixture.addFileToProject("other.routed", "value").getVirtualFile();
+        start(true);
+        next().future.complete(new WorkspaceDiagnosticReport(List.of(
+                report(rejected, "must not leak", null), report(owned, "owned", null))));
+        next();
+        assertNotNull(wrapper.getClosedDocument(LSPIJUtils.toUri(owned), false));
+        assertNull(wrapper.getClosedDocument(LSPIJUtils.toUri(rejected), false));
     }
 
     public void testWorkspaceResultsRefreshOpenDocumentWithoutReplacingDocumentDiagnostics() throws Exception {
@@ -181,6 +221,7 @@ public class WorkspaceDiagnosticsTest extends UsefulTestCase {
 
     private static class ScopedServer extends MockLanguageServerDefinition {
         LanguageClientImpl client;
+        boolean allFilesEnabled;
         ScopedServer() { super("workspace-diagnostics", false); }
         @Override public @NotNull LanguageClientImpl createLanguageClient(@NotNull Project project) {
             return client = new LanguageClientImpl(project);
@@ -188,7 +229,7 @@ public class WorkspaceDiagnosticsTest extends UsefulTestCase {
         @Override public @NotNull LSPClientFeatures createClientFeatures() {
             return new LSPClientFeatures() {
                 @Override public boolean isEnabled(@NotNull VirtualFile file) {
-                    return file.getName().equals("owned.workspace");
+                    return allFilesEnabled || file.getName().equals("owned.workspace");
                 }
             };
         }
