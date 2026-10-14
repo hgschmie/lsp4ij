@@ -7,7 +7,7 @@ contains the workspace diagnostic implementation, tests and protocol documentati
 The work branch retains local IDEA 262/Gradle build accommodations and includes
 upstream's accepted breakpoint and file-selection fixes.
 
-Archive: `lsp4ij-0.21.1-SNAPSHOT-workspace-diagnostics-patched1.zip`, copied into
+Archive: `lsp4ij-0.21.1-SNAPSHOT-workspace-diagnostics-patched2.zip`, copied into
 `upstream/lsp4ij/build/distributions/` after validation. FDE's `lsp4ij.lock` pins
 the signed work revision, archive version and SHA-256. Run
 `intellij-factorio/scripts/build-lsp4ij.sh` to verify and prepare
@@ -33,6 +33,11 @@ hooks and pass with the feature. The selected suite also covers existing Rust
 and TypeScript diagnostics, server restart, per-file routing and DAP breakpoint
 removal (24 tests total). Outputs are under each checkout's `build/`; the
 before/after evidence is in the feature checkout's `build/reports/`.
+
+The patched2 build also publishes each closed document's diagnostic list and
+error status together through one immutable snapshot. The provider regression
+checks error status as reports are added and cleared, and retains an older list
+to verify later updates do not mutate it.
 
 Workspace results are scoped per server and diagnostic provider. Closed files
 receive full/unchanged/streamed reports; open files retain document-pull priority.
