@@ -19,8 +19,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 import static com.redhat.devtools.lsp4ij.features.diagnostics.LSPDiagnosticUtils.isDiagnosticsChanged;
 
@@ -31,15 +32,22 @@ import static com.redhat.devtools.lsp4ij.features.diagnostics.LSPDiagnosticUtils
  */
 public class ClosedDocument extends LSPDocumentBase {
 
-    private List<Diagnostic> diagnostics;
-    private boolean hasErrors;
+    private final Map<String, List<Diagnostic>> diagnosticsPerIdentifier = new HashMap<>();
+    private volatile List<Diagnostic> diagnostics = List.of();
+    private volatile boolean hasErrors;
 
     @Override
-    public boolean updateDiagnostics(@NotNull String identifier,
+    public synchronized boolean updateDiagnostics(@NotNull String identifier,
                                      @NotNull List<Diagnostic> diagnostics, @Nullable Integer version) {
-        boolean changed = isDiagnosticsChanged(this.diagnostics != null ? this.diagnostics : Collections.emptyList(), diagnostics);
-        this.diagnostics = diagnostics;
-        hasErrors = diagnostics
+        if (diagnostics.isEmpty()) {
+            diagnosticsPerIdentifier.remove(identifier);
+        } else {
+            diagnosticsPerIdentifier.put(identifier, List.copyOf(diagnostics));
+        }
+        var combined = diagnosticsPerIdentifier.values().stream().flatMap(List::stream).distinct().toList();
+        boolean changed = isDiagnosticsChanged(this.diagnostics, combined);
+        this.diagnostics = combined;
+        hasErrors = combined
                 .stream()
                 .anyMatch(diagnostic -> diagnostic.getSeverity() != null && diagnostic.getSeverity() == DiagnosticSeverity.Error);
         return changed;
@@ -47,7 +55,7 @@ public class ClosedDocument extends LSPDocumentBase {
 
     @Override
     public Collection<Diagnostic> getDiagnostics() {
-        return diagnostics != null ? diagnostics : Collections.emptyList();
+        return diagnostics;
     }
 
     @Override

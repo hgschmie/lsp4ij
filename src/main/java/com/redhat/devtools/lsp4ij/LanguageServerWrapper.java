@@ -547,6 +547,7 @@ public class LanguageServerWrapper implements Disposable {
                         this.launcherFuture = initializingContext.launcherFuture;
 
                         updateStatus(ServerStatus.started);
+                        languageClient.updateWorkspaceDiagnosticProviders();
                         return initializingContext;
                     })
                     .thenRun(() -> {
@@ -1064,6 +1065,13 @@ public class LanguageServerWrapper implements Disposable {
     @Nullable
     public ServerCapabilities getServerCapabilitiesSync() {
         return serverCapabilities;
+    }
+
+    @ApiStatus.Internal
+    public void updateWorkspaceDiagnosticProviders() {
+        if (languageClient != null) {
+            languageClient.updateWorkspaceDiagnosticProviders();
+        }
     }
 
     public void registerCapability(RegistrationParams params) {
