@@ -1,3 +1,20 @@
+# Diagnostic notification hook — patched4 (2026-10-14)
+
+Package: `0.21.1-SNAPSHOT-workspace-diagnostics-patched4`. Adds the independent
+`feat/diagnostic-update-hook` contribution branch (upstream/main `12703a33`),
+allowing clients to observe accepted/merged diagnostic cache snapshots for both
+open and closed files. Existing workspace diagnostic support remains unchanged.
+FDE 0.8.0-dev uses this hook for its Factorio Problems tab; the callback itself
+adds no UI and makes no language-server requests. Lifecycle clearing belongs to
+the consuming client. Source and test follow-up are integrated with signed
+provenance cherry-picks, avoiding unrelated upstream changes. No push or PR.
+
+Build/check commands below still apply. Feature regressions cover closed-file
+warning replacement/clearing and multiple providers in open files. Final package
+and FDE integration evidence: workspace `upstream/FACTORIO_PROBLEMS_2026-10-14.md`.
+
+---
+
 # Local LSP4IJ build
 
 Build branch: `work/factorio-build`, checked out at
