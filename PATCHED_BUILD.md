@@ -1,4 +1,28 @@
-# Diagnostic notification hook — patched4 (2026-10-14)
+# Upstream and review refresh — patched5 (2026-10-16)
+
+Package: `0.21.1-SNAPSHOT-workspace-diagnostics-patched5`, for IDEA 262.
+The work branch merges current upstream/main `cbe50d3d` and both independent
+contributions: UP-044 / #1703 at `f18c78d0`, and UP-055 / #1704 at `132d557b`.
+The prior patched4 work head is preserved at
+`refs/archive/factorio-build-before-patched5-20261016`.
+
+This incorporates upstream process-startup, file-operation, diagnostic-disposal
+and editor-refresh fixes. Workspace diagnostic matching now completes
+asynchronously without blocking lifecycle operations. Matcher failures reject
+only the affected report; unregistration clears the removed provider's closed
+diagnostics and notifies diagnostic consumers while retaining other providers.
+An integration regression in this work branch protects that cleanup callback.
+Both contribution branches remain independent and unchanged.
+
+The merged production tree matches the two PR patches combined on current main;
+local differences are build configuration, this document and the integration
+test. Validation evidence is under `build/investigations/patched5-20261016/`.
+The selected suite covers diagnostics, matching, restart, disposal, refresh,
+document stamps, process startup and breakpoints. FDE compatibility checks and
+archive checksums are recorded in workspace
+`upstream/LSP4IJ_PATCHED5_2026-10-16.md`.
+
+# Previous diagnostic notification hook — patched4 (2026-10-14)
 
 Package: `0.21.1-SNAPSHOT-workspace-diagnostics-patched4`. Adds the independent
 `feat/diagnostic-update-hook` contribution branch (upstream/main `12703a33`),
@@ -19,12 +43,12 @@ and FDE integration evidence: workspace `upstream/FACTORIO_PROBLEMS_2026-10-14.m
 
 Build branch: `work/factorio-build`, checked out at
 `upstream/lsp4ij/build/checkouts/patched`. The contribution branch
-`feat/workspace-diagnostics` is based directly on upstream/main `f3825955` and
+`feat/workspace-diagnostics` is based directly on upstream/main `cbe50d3d` and
 contains the workspace diagnostic implementation, tests and protocol documentation.
 The work branch retains local IDEA 262/Gradle build accommodations and includes
 upstream's accepted breakpoint and file-selection fixes.
 
-Archive: `lsp4ij-0.21.1-SNAPSHOT-workspace-diagnostics-patched3.zip`, copied into
+Archive: `lsp4ij-0.21.1-SNAPSHOT-workspace-diagnostics-patched5.zip`, copied into
 `upstream/lsp4ij/build/distributions/` after validation. FDE's `lsp4ij.lock` pins
 the signed work revision, archive version and SHA-256. Run
 `intellij-factorio/scripts/build-lsp4ij.sh` to verify and prepare
@@ -39,10 +63,13 @@ properties under `dev/build-home` and `dev/tmp`. Build with:
   -PbuildJavaVersion=25 \
   '-Dorg.gradle.java.installations.paths=/Users/henning/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home' \
   test --tests '*features.diagnostics.*' --tests '*LanguageServerWrapper*' \
-  --tests '*LanguageServerFileEnablementTest' --tests '*DAPBreakpoint*' buildPlugin
+  --tests '*LanguageServerFileEnablementTest' --tests '*DAPBreakpoint*' \
+  --tests '*DocumentContentSynchronizerDisposalTest' --tests '*EditorRefreshBatchTest' \
+  --tests '*DocumentStampValidationTest' --tests '*OSProcessStreamConnectionProviderTest' \
+  buildPlugin
 ```
 
-## Validation scope
+## Historical validation scope (patched1–patched3)
 
 The feature has ten request/cache tests and seven real-transport/IntelliJ cache
 tests. All five integration tests fail with upstream's unmodified production

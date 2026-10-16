@@ -135,7 +135,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
 intellijPlatform {
     pluginConfiguration {
         name = properties("pluginName")
-        changeNotes = "Local IDEA 262 build with workspace diagnostic pulls, streamed results and refresh lifecycle support."
+        changeNotes = "Local IDEA 262 build updated to upstream/main cbe50d3d, with workspace diagnostics and diagnostic cache notifications. Includes asynchronous matching, per-report failure recovery, provider cleanup, and upstream disposal and editor-refresh fixes."
 
         // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
         description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
