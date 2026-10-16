@@ -6,9 +6,11 @@ local package counter in `pluginBuild`. Increase the counter for the next local
 package. The diagnostic and patch-name suffixes are no longer part of the version.
 
 The work branch includes the signed documentation updates from UP-044
-(`41f08b00`) and UP-055 (`bc613d84`). Runtime code is unchanged from patched5.
+(`41f08b00`) and UP-055 (`bc613d84`), plus the completed UP-044 review
+fix `08475429` clearing a rejected closed-file provider after routing changes.
+It retains UP-055 diagnostic notifications on the combined work branch.
 `buildPlugin` passed against the installed IDEA 262 SDK; the ZIP CRC and embedded
-plugin descriptor were verified. Build log: `build/investigations/build6-20261016/gradle.log`.
+plugin descriptor were verified. Build log: `build/investigations/build6-20261016/gradle-final.log`.
 
 # Upstream and review refresh — patched5 (2026-10-16)
 
