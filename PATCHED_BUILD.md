@@ -1,3 +1,20 @@
+# Local package counter — build 7 (2026-10-16)
+
+Package: `lsp4ij-0.21.1-SNAPSHOT-7.zip`; embedded version `0.21.1-SNAPSHOT-7`.
+The complete upstream version, including its prerelease marker, stays in
+`pluginVersion=0.21.1-SNAPSHOT`; the separate local counter is `pluginBuild=7`.
+This implements the workspace HANDOFF naming convention. Build 6 omitted
+`SNAPSHOT`; retain its archive as history and use build 7 for installation.
+
+Production code is unchanged from the validated combined build 6: upstream/main
+`cbe50d3d`, UP-044 `08475429` and UP-055 `bc613d84`, including all four completed
+review fixes and both Javadoc updates. Local IDEA 262 build support remains.
+All 57 selected diagnostic/lifecycle/routing/process tests pass, with no skips.
+ZIP and nested JAR integrity, plugin ID/version/minimum IDE build and absence of
+test classes are verified. Identical archives are copied to the main repository's
+`build/distributions/` and workspace `plugins/`. Build and validation evidence:
+`build/investigations/build7-20261016/`.
+
 # Local package counter — build 6 (2026-10-16)
 
 The installable archive is `lsp4ij-0.21.1-6.zip`; its plugin version is `0.21.1-6`.
