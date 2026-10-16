@@ -5,6 +5,9 @@ The installable archive is `lsp4ij-0.21.1-6.zip`; its plugin version is `0.21.1-
 local package counter in `pluginBuild`. Increase the counter for the next local
 package. The diagnostic and patch-name suffixes are no longer part of the version.
 
+Validation of the final combined package: 54 diagnostic/lifecycle/routing tests
+pass with no failures or skips. Reports: `build/investigations/build6-20261016/`.
+
 The work branch includes the signed documentation updates from UP-044
 (`41f08b00`) and UP-055 (`bc613d84`), plus the completed UP-044 review
 fix `08475429` clearing a rejected closed-file provider after routing changes.
