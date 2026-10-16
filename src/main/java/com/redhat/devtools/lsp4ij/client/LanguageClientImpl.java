@@ -25,7 +25,6 @@ import com.redhat.devtools.lsp4ij.features.diagnostics.WorkspaceDiagnosticManage
 import com.redhat.devtools.lsp4ij.features.diagnostics.LSPDiagnosticHandler;
 import com.redhat.devtools.lsp4ij.features.progress.LSPProgressManager;
 import com.redhat.devtools.lsp4ij.internal.PsiFileCancelChecker;
-import com.redhat.devtools.lsp4ij.internal.VirtualFileCancelChecker;
 import com.redhat.devtools.lsp4ij.internal.editor.EditorFeatureManager;
 import com.redhat.devtools.lsp4ij.internal.editor.EditorFeatureType;
 import com.redhat.devtools.lsp4ij.settings.GlobalLanguageServerSettings;
@@ -42,8 +41,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 /**
@@ -98,7 +97,8 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
         this.progressManager.connect(server, wrapper);
         this.workspaceDiagnostics = new WorkspaceDiagnosticManager(server.getWorkspaceService(),
                 AppExecutorUtil.createBoundedScheduledExecutorService("LSP workspace diagnostics", 1),
-                this::applyWorkspaceDiagnosticReport);
+                this::matchWorkspaceDiagnosticFile, this::applyWorkspaceDiagnosticReport,
+                wrapper::clearClosedDocumentDiagnostics);
     }
 
     protected final @Nullable LanguageServer getLanguageServer() {
@@ -113,35 +113,31 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
         }
     }
 
-    private boolean applyWorkspaceDiagnosticReport(String identifier, WorkspaceDocumentDiagnosticReport report) {
-        String uri = report.isLeft() ? report.getLeft().getUri() : report.getRight().getUri();
-        Integer version = report.isLeft() ? report.getLeft().getVersion() : report.getRight().getVersion();
+    private CompletableFuture<Boolean> matchWorkspaceDiagnosticFile(String uri) {
         if (isDisposed()) {
-            return false;
+            return CompletableFuture.completedFuture(false);
         }
         var features = getClientFeatures();
         VirtualFile file = FileUriSupport.findFileByUri(uri, features);
         if (file == null || !ReadAction.compute(() -> !isDisposed() && file.isValid() && features.isEnabled(file))) {
-            return false;
+            return CompletableFuture.completedFuture(false);
         }
         // A server may report every workspace file, including files routed to
         // another server by a DocumentMatcher. Feature enablement alone is not
         // sufficient: most clients keep its default (true).
-        var matched = LanguageServiceAccessor.getInstance(project).isFileMappedToServer(file, getServerDefinition());
-        try {
-            // This callback runs on the workspace-diagnostic executor, never the
-            // EDT/RPC reader. Await async matchers without holding a read lock.
-            if (!matched.get()) {
-                return false;
-            }
-        } catch (InterruptedException e) {
-            matched.cancel(true);
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (ExecutionException e) {
-            throw new java.util.concurrent.CompletionException(e.getCause());
-        }
+        return LanguageServiceAccessor.getInstance(project).isFileMappedToServer(file, getServerDefinition());
+    }
+
+    private boolean applyWorkspaceDiagnosticReport(String identifier, WorkspaceDocumentDiagnosticReport report) {
         if (isDisposed()) {
+            return false;
+        }
+        String uri = report.isLeft() ? report.getLeft().getUri() : report.getRight().getUri();
+        Integer version = report.isLeft() ? report.getLeft().getVersion() : report.getRight().getVersion();
+        var features = getClientFeatures();
+        VirtualFile file = FileUriSupport.findFileByUri(uri, features);
+        // Matching may have completed after the file or connection changed.
+        if (file == null || !ReadAction.compute(() -> !isDisposed() && file.isValid() && features.isEnabled(file))) {
             return false;
         }
         var opened = wrapper.getOpenedDocument(FileUriSupport.getFileUri(file, features));
@@ -225,46 +221,31 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
 
     @Override
     public CompletableFuture<Void> refreshCodeLenses() {
-        return CompletableFuture.runAsync(this::refreshCodeLensForAllOpenedFiles);
-    }
-
-    private void refreshCodeLensForAllOpenedFiles() {
-        for (var openedDocument : wrapper.getOpenedDocuments()) {
-            VirtualFile file = openedDocument.getFile();
-            EditorFeatureManager.getInstance(getProject())
-                    .refreshEditorFeature(file, EditorFeatureType.CODE_VISION, true, new VirtualFileCancelChecker(file));
-        }
+        return refreshEditorFeatures(EditorFeatureType.CODE_VISION);
     }
 
     @Override
     public CompletableFuture<Void> refreshInlayHints() {
-        return CompletableFuture.runAsync(() -> {
-            if (wrapper == null) {
-                return;
-            }
-            refreshInlayHintsForAllOpenedFiles();
-        });
-    }
-
-    private void refreshInlayHintsForAllOpenedFiles() {
-        for (var openedDocument : wrapper.getOpenedDocuments()) {
-            VirtualFile file = openedDocument.getFile();
-            EditorFeatureManager efm = EditorFeatureManager.getInstance(getProject());
-            efm.refreshEditorFeature(file, EditorFeatureType.DECLARATIVE_INLAY_HINT, true, new VirtualFileCancelChecker(file));
-        }
+        return refreshEditorFeatures(EditorFeatureType.DECLARATIVE_INLAY_HINT);
     }
 
     @Override
     public CompletableFuture<Void> refreshSemanticTokens() {
-        return CompletableFuture.runAsync(this::refreshSemanticTokensForAllOpenedFiles);
+        return refreshEditorFeatures(EditorFeatureType.SEMANTIC_TOKENS);
     }
 
-    private void refreshSemanticTokensForAllOpenedFiles() {
-        for (var openedDocument : wrapper.getOpenedDocuments()) {
-            VirtualFile file = openedDocument.getFile();
-            EditorFeatureManager.getInstance(getProject())
-                    .refreshEditorFeature(file, EditorFeatureType.SEMANTIC_TOKENS, true, new VirtualFileCancelChecker(file));
+    private CompletableFuture<Void> refreshEditorFeatures(EditorFeatureType feature) {
+        if (wrapper != null && !isDisposed() && !wrapper.isDisposed()) {
+            EditorFeatureManager.getInstance(project).refreshEditorFeatures(this,
+                    () -> wrapper.getOpenedDocuments().stream().map(OpenedDocument::getFile).toList(), feature,
+                    () -> {
+                        if (isDisposed() || wrapper.isDisposed()) {
+                            throw new CancellationException();
+                        }
+                    });
         }
+        // Acknowledge scheduling. Coalescing superseded work must not fail an LSP refresh RPC.
+        return CompletableFuture.completedFuture(null);
     }
 
     @Override

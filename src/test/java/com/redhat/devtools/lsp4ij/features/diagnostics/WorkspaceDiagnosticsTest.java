@@ -119,6 +119,104 @@ public class WorkspaceDiagnosticsTest extends UsefulTestCase {
         assertNull(wrapper.getClosedDocument(LSPIJUtils.toUri(rejected), false));
     }
 
+    public void testPendingMatcherDoesNotBlockRefreshOrPublishLateResults() throws Exception {
+        var matching = new CompletableFuture<Boolean>();
+        var matcherStarted = new CompletableFuture<Void>();
+        registerAsyncMatcher(file -> {
+            if (file.getName().equals("pending.routed")) {
+                matcherStarted.complete(null);
+                return matching;
+            }
+            return CompletableFuture.completedFuture(true);
+        });
+        var pending = fixture.addFileToProject("pending.routed", "value").getVirtualFile();
+        var current = fixture.addFileToProject("current.routed", "value").getVirtualFile();
+        start(true);
+        var first = next();
+        try {
+            stream(first, report(pending, "stale", null));
+            matcherStarted.get(5, TimeUnit.SECONDS);
+            definition.client.refreshDiagnostics().get(5, TimeUnit.SECONDS);
+            var refreshed = next();
+            await(first.future::isCancelled);
+            matching.complete(true);
+            refreshed.future.complete(new WorkspaceDiagnosticReport(List.of(report(current, "current", null))));
+            next(); // all reports from the completed request have been processed
+            assertNull(wrapper.getClosedDocument(LSPIJUtils.toUri(pending), false));
+            assertEquals("current", wrapper.getClosedDocument(LSPIJUtils.toUri(current), false)
+                    .getDiagnostics().iterator().next().getMessage().getLeft());
+        } finally {
+            matching.complete(false); // release the old implementation when the regression fails
+        }
+    }
+
+    public void testFailedMatcherDoesNotDropOtherReportsOrStopPulls() throws Exception {
+        registerAsyncMatcher(file -> file.getName().equals("failed.routed")
+                ? CompletableFuture.failedFuture(new IllegalStateException("matcher failed"))
+                : CompletableFuture.completedFuture(true));
+        var failed = fixture.addFileToProject("failed.routed", "value").getVirtualFile();
+        var owned = fixture.addFileToProject("owned.routed", "value").getVirtualFile();
+        start(true);
+        next().future.complete(new WorkspaceDiagnosticReport(List.of(
+                report(failed, "rejected", null), report(owned, "accepted", null))));
+        next();
+        assertNull(wrapper.getClosedDocument(LSPIJUtils.toUri(failed), false));
+        assertEquals("accepted", wrapper.getClosedDocument(LSPIJUtils.toUri(owned), false)
+                .getDiagnostics().iterator().next().getMessage().getLeft());
+    }
+
+    public void testNamedProviderUnregistrationClearsClosedDiagnostics() throws Exception {
+        assertProviderUnregistrationClearsClosedDiagnostics("dynamic");
+    }
+
+    public void testDefaultProviderUnregistrationClearsClosedDiagnostics() throws Exception {
+        assertProviderUnregistrationClearsClosedDiagnostics(null);
+    }
+
+    private void assertProviderUnregistrationClearsClosedDiagnostics(String identifier) throws Exception {
+        definition.allFilesEnabled = true;
+        var first = fixture.addFileToProject("first.workspace", "value").getVirtualFile();
+        var second = fixture.addFileToProject("second.workspace", "value").getVirtualFile();
+        start(false);
+        wrapper.updateDiagnostics(first, "other", List.of(diagnostic("retained")), null);
+        var options = JSONUtils.getLsp4jGson().fromJson("{"
+                + (identifier == null ? "" : "\"identifier\":\"" + identifier + "\",")
+                + "\"workspaceDiagnostics\":true}", com.google.gson.JsonObject.class);
+        definition.client.registerCapability(new RegistrationParams(List.of(
+                new Registration("dynamic", "textDocument/diagnostic", options)))).get(5, TimeUnit.SECONDS);
+        var request = next();
+        assertEquals(identifier, request.params.getIdentifier());
+        var errorReport = report(first, "removed", null);
+        errorReport.getLeft().getItems().get(0).setSeverity(DiagnosticSeverity.Error);
+        stream(request, errorReport, report(second, "removed too", null));
+        await(() -> wrapper.getClosedDocument(LSPIJUtils.toUri(second), false) != null
+                && wrapper.getClosedDocument(LSPIJUtils.toUri(second), false).getDiagnostics().size() == 1);
+        var firstDocument = wrapper.getClosedDocument(LSPIJUtils.toUri(first), false);
+        var secondDocument = wrapper.getClosedDocument(LSPIJUtils.toUri(second), false);
+        assertEquals(2, firstDocument.getDiagnostics().size());
+        assertTrue(firstDocument.hasErrors());
+        definition.client.unregisterCapability(new UnregistrationParams(List.of(
+                new Unregistration("dynamic", "textDocument/diagnostic")))).get(5, TimeUnit.SECONDS);
+        await(request.future::isCancelled);
+        await(() -> firstDocument.getDiagnostics().size() == 1 && secondDocument.getDiagnostics().isEmpty());
+        assertEquals("retained", firstDocument.getDiagnostics().iterator().next().getMessage().getLeft());
+        assertFalse(firstDocument.hasErrors());
+    }
+
+    private void registerAsyncMatcher(java.util.function.Function<VirtualFile, CompletableFuture<Boolean>> matcher) {
+        definition.allFilesEnabled = true;
+        LanguageServersRegistry.getInstance().registerAssociation(definition,
+                new ServerFileNamePatternMapping(List.of("*.routed"), definition.getId(), null, new DocumentMatcher() {
+                    @Override public boolean match(@NotNull VirtualFile file, @NotNull Project project) {
+                        throw new AssertionError("Async matcher must use matchAsync");
+                    }
+                    @Override public boolean shouldBeMatchedAsynchronously(@NotNull Project project) { return true; }
+                    @Override public @NotNull CompletableFuture<Boolean> matchAsync(@NotNull VirtualFile file, @NotNull Project project) {
+                        return matcher.apply(file);
+                    }
+                }));
+    }
+
     public void testWorkspaceResultsRefreshOpenDocumentWithoutReplacingDocumentDiagnostics() throws Exception {
         start(true);
         definition.getServer().setPullDiagnostics(new DocumentDiagnosticReport(

@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * One workspace diagnostic pull loop per provider, scoped to one server connection.
@@ -33,16 +35,22 @@ public final class WorkspaceDiagnosticManager implements Disposable {
 
     private final WorkspaceService server;
     private final ScheduledExecutorService executor;
+    private final Function<String, CompletableFuture<Boolean>> matches;
     private final BiPredicate<String, WorkspaceDocumentDiagnosticReport> reports;
+    private final Consumer<String> clearProvider;
     private final Map<String, Provider> providers = new HashMap<>();
     private volatile boolean disposed;
 
     /** The executor must serialize tasks and is owned by this manager. */
     public WorkspaceDiagnosticManager(WorkspaceService server, ScheduledExecutorService executor,
-                                      BiPredicate<String, WorkspaceDocumentDiagnosticReport> reports) {
+                                      Function<String, CompletableFuture<Boolean>> matches,
+                                      BiPredicate<String, WorkspaceDocumentDiagnosticReport> reports,
+                                      Consumer<String> clearProvider) {
         this.server = server;
         this.executor = executor;
+        this.matches = matches;
         this.reports = reports;
+        this.clearProvider = clearProvider;
     }
 
     public void updateProviders(Set<String> identifiers) {
@@ -54,6 +62,7 @@ public final class WorkspaceDiagnosticManager implements Disposable {
                 if (!copy.contains(entry.getKey())) {
                     cancel(entry.getValue());
                     iterator.remove();
+                    clearProvider.accept(entry.getKey());
                 }
             }
             for (String identifier : copy) {
@@ -81,7 +90,8 @@ public final class WorkspaceDiagnosticManager implements Disposable {
         }
         execute(() -> {
             for (var provider : providers.values()) {
-                if (params.getToken().isLeft() && Objects.equals(provider.token, params.getToken().getLeft())) {
+                if (!provider.responseComplete && params.getToken().isLeft()
+                        && Objects.equals(provider.token, params.getToken().getLeft())) {
                     var gson = JSONUtils.getLsp4jGson();
                     var report = gson.fromJson(gson.toJsonTree(params.getValue().getRight()), WorkspaceDiagnosticReport.class);
                     accept(provider, report);
@@ -108,13 +118,15 @@ public final class WorkspaceDiagnosticManager implements Disposable {
                 if (!Objects.equals(provider.token, token)) {
                     return; // a refreshed/unregistered request completed late
                 }
-                provider.token = null;
                 provider.request = null;
                 if (error == null) {
+                    provider.responseComplete = true;
                     accept(provider, report);
-                    schedule(provider);
-                } else if (shouldRetrigger(error)) {
-                    schedule(provider);
+                } else {
+                    cancel(provider);
+                    if (shouldRetrigger(error)) {
+                        schedule(provider);
+                    }
                 }
             }));
         } catch (RuntimeException error) {
@@ -125,23 +137,62 @@ public final class WorkspaceDiagnosticManager implements Disposable {
     }
 
     private void accept(Provider provider, WorkspaceDiagnosticReport report) {
-        if (report == null || report.getItems() == null) {
+        if (report != null && report.getItems() != null) {
+            provider.pendingReports.addAll(report.getItems());
+        }
+        applyNextReport(provider);
+    }
+
+    /** Await matching without occupying the executor or reordering this provider's reports. */
+    private void applyNextReport(Provider provider) {
+        if (disposed || provider.matching != null) {
             return;
         }
-        for (var item : report.getItems()) {
-            if (disposed) {
-                return;
-            }
+        while (!provider.pendingReports.isEmpty()) {
+            var item = provider.pendingReports.removeFirst();
             String uri = item.isLeft() ? item.getLeft().getUri() : item.getRight().getUri();
-            String resultId = item.isLeft() ? item.getLeft().getResultId() : item.getRight().getResultId();
             if (item.isRight() && !provider.resultIds.containsKey(uri)) {
                 continue; // no cached full report to retain
             }
-            if (reports.test(provider.identifier, item) && resultId != null) {
-                provider.resultIds.put(uri, resultId);
-            } else {
+            CompletableFuture<Boolean> matching;
+            try {
+                matching = Objects.requireNonNull(matches.apply(uri));
+            } catch (RuntimeException error) {
+                LOGGER.warn("Unable to match workspace diagnostic file {}", uri, error);
                 provider.resultIds.remove(uri);
+                continue;
             }
+            provider.matching = matching;
+            String token = provider.token;
+            matching.whenComplete((matched, error) -> execute(() -> {
+                if (!Objects.equals(provider.token, token) || provider.matching != matching) {
+                    return; // refresh/unregistration invalidated this match, even if cancellation was refused
+                }
+                provider.matching = null;
+                boolean accepted = false;
+                if (error != null) {
+                    LOGGER.warn("Unable to match workspace diagnostic file {}", uri, error);
+                } else if (Boolean.TRUE.equals(matched)) {
+                    try {
+                        accepted = reports.test(provider.identifier, item);
+                    } catch (RuntimeException failure) {
+                        LOGGER.warn("Unable to apply workspace diagnostics for {}", uri, failure);
+                    }
+                }
+                String resultId = item.isLeft() ? item.getLeft().getResultId() : item.getRight().getResultId();
+                if (accepted && resultId != null) {
+                    provider.resultIds.put(uri, resultId);
+                } else {
+                    provider.resultIds.remove(uri);
+                }
+                applyNextReport(provider);
+            }));
+            return;
+        }
+        if (provider.responseComplete) {
+            provider.responseComplete = false;
+            provider.token = null;
+            schedule(provider);
         }
     }
 
@@ -175,6 +226,12 @@ public final class WorkspaceDiagnosticManager implements Disposable {
 
     private void cancel(Provider provider) {
         provider.token = null;
+        provider.responseComplete = false;
+        provider.pendingReports.clear();
+        if (provider.matching != null) {
+            provider.matching.cancel(true);
+            provider.matching = null;
+        }
         if (provider.request != null) {
             provider.request.cancel(true);
             provider.request = null;
@@ -219,7 +276,10 @@ public final class WorkspaceDiagnosticManager implements Disposable {
     private static final class Provider {
         final String identifier;
         final Map<String, String> resultIds = new HashMap<>();
+        final Deque<WorkspaceDocumentDiagnosticReport> pendingReports = new ArrayDeque<>();
         String token;
+        boolean responseComplete;
+        CompletableFuture<Boolean> matching;
         CompletableFuture<WorkspaceDiagnosticReport> request;
         ScheduledFuture<?> scheduled;
 

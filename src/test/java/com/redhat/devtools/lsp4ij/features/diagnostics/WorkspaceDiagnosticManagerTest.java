@@ -200,6 +200,115 @@ public class WorkspaceDiagnosticManagerTest {
         assertFalse(document.hasErrors());
     }
 
+    @Test
+    public void pendingMatchesPreserveStreamedAndFinalReportOrder() throws Exception {
+        var h = harness();
+        var pending = new CompletableFuture<Boolean>();
+        var started = new CompletableFuture<Void>();
+        var count = new java.util.concurrent.atomic.AtomicInteger();
+        h.matcher = uri -> {
+            if (count.getAndIncrement() == 0) {
+                started.complete(null);
+                return pending;
+            }
+            return CompletableFuture.completedFuture(true);
+        };
+        h.manager.updateProviders(Set.of("lua"));
+        var request = h.next();
+        h.partial(request, full("file:///a.lua", "one"));
+        started.get(5, TimeUnit.SECONDS);
+        request.future.complete(full("file:///a.lua", "two"));
+        h.executor.submit(() -> {}).get(5, TimeUnit.SECONDS);
+        assertTrue(h.applied.isEmpty());
+        pending.complete(true);
+        assertEquals("one", h.applied.poll(5, TimeUnit.SECONDS).getLeft().getResultId());
+        assertEquals("two", h.applied.poll(5, TimeUnit.SECONDS).getLeft().getResultId());
+        assertEquals(List.of(new PreviousResultId("file:///a.lua", "two")), h.next().params.getPreviousResultIds());
+    }
+
+    @Test
+    public void pendingMatcherDoesNotBlockOtherProvidersOrUnregistration() throws Exception {
+        var h = harness();
+        var pending = new MatchFuture();
+        var started = new CompletableFuture<Void>();
+        h.matcher = uri -> {
+            if (uri.endsWith("blocked.lua")) {
+                started.complete(null);
+                return pending;
+            }
+            return CompletableFuture.completedFuture(true);
+        };
+        h.manager.updateProviders(Set.of("lua", "other"));
+        var first = h.next();
+        var second = h.next();
+        var blocked = first.params.getIdentifier().equals("lua") ? first : second;
+        var other = blocked == first ? second : first;
+        h.partial(blocked, full("file:///blocked.lua", "old"));
+        started.get(5, TimeUnit.SECONDS);
+        h.partial(other, full("file:///other.lua", "live"));
+        assertEquals("live", h.applied.poll(5, TimeUnit.SECONDS).getLeft().getResultId());
+        h.manager.updateProviders(Set.of("other"));
+        h.executor.submit(() -> {}).get(5, TimeUnit.SECONDS);
+        assertTrue(blocked.future.isCancelled());
+        assertTrue(pending.cancelRequested);
+        assertEquals(List.of("lua"), h.clearedProviders);
+        pending.complete(true); // matching may ignore cancellation; it must still not publish
+        h.executor.submit(() -> {}).get(5, TimeUnit.SECONDS);
+        assertTrue(h.applied.isEmpty());
+        h.manager.updateProviders(Set.of("lua", "other"));
+        assertTrue(h.next().params.getPreviousResultIds().isEmpty());
+    }
+
+    @Test
+    public void shutdownCancelsPendingMatcherWithoutWaitingForIt() throws Exception {
+        var h = harness();
+        var pending = new MatchFuture();
+        var started = new CompletableFuture<Void>();
+        h.matcher = uri -> { started.complete(null); return pending; };
+        h.manager.updateProviders(Set.of("lua"));
+        var request = h.next();
+        h.partial(request, full("file:///a.lua", "old"));
+        started.get(5, TimeUnit.SECONDS);
+        h.manager.dispose();
+        assertTrue(h.executor.awaitTermination(5, TimeUnit.SECONDS));
+        assertTrue(pending.cancelRequested);
+        assertTrue(request.future.isCancelled());
+        pending.complete(true);
+        assertTrue(h.applied.isEmpty());
+    }
+
+    @Test
+    public void matcherFailuresRejectOnlyTheirReportsAndResultIds() throws Exception {
+        var h = harness();
+        h.manager.updateProviders(Set.of("lua"));
+        h.next().future.complete(full("file:///a.lua", "old"));
+        assertNotNull(h.applied.poll(5, TimeUnit.SECONDS));
+        var next = h.next();
+        assertEquals(1, next.params.getPreviousResultIds().size());
+        h.matcher = uri -> {
+            if (uri.endsWith("a.lua")) {
+                throw new IllegalStateException("synchronous matcher failure");
+            }
+            return uri.endsWith("b.lua")
+                    ? CompletableFuture.failedFuture(new IllegalStateException("asynchronous matcher failure"))
+                    : CompletableFuture.completedFuture(true);
+        };
+        next.future.complete(new WorkspaceDiagnosticReport(List.of(
+                full("file:///a.lua", "rejected").getItems().get(0),
+                full("file:///b.lua", "rejected").getItems().get(0),
+                full("file:///c.lua", "accepted").getItems().get(0))));
+        assertEquals("accepted", h.applied.poll(5, TimeUnit.SECONDS).getLeft().getResultId());
+        assertEquals(List.of(new PreviousResultId("file:///c.lua", "accepted")), h.next().params.getPreviousResultIds());
+    }
+
+    private static class MatchFuture extends CompletableFuture<Boolean> {
+        volatile boolean cancelRequested;
+        @Override public boolean cancel(boolean interrupt) {
+            cancelRequested = true;
+            return false;
+        }
+    }
+
     private static ResponseErrorException cancelled(Object data) {
         return new ResponseErrorException(new ResponseError(ResponseErrorCode.ServerCancelled, "cancelled", data));
     }
@@ -228,10 +337,12 @@ public class WorkspaceDiagnosticManagerTest {
         final BlockingQueue<WorkspaceDocumentDiagnosticReport> applied = new LinkedBlockingQueue<>();
         volatile boolean accept = true;
         volatile boolean refuseCancellation;
-        final WorkspaceDiagnosticManager manager = new WorkspaceDiagnosticManager(this, executor, (identifier, report) -> {
+        volatile java.util.function.Function<String, CompletableFuture<Boolean>> matcher = uri -> CompletableFuture.completedFuture(true);
+        final List<String> clearedProviders = new CopyOnWriteArrayList<>();
+        final WorkspaceDiagnosticManager manager = new WorkspaceDiagnosticManager(this, executor, uri -> matcher.apply(uri), (identifier, report) -> {
             applied.add(report);
             return accept;
-        });
+        }, clearedProviders::add);
         @Override public CompletableFuture<WorkspaceDiagnosticReport> diagnostic(WorkspaceDiagnosticParams params) {
             var future = new Future(refuseCancellation);
             requests.add(new Request(params, future));
