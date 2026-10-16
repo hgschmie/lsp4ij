@@ -1,3 +1,15 @@
+# Local package counter — build 6 (2026-10-16)
+
+The installable archive is `lsp4ij-0.21.1-6.zip`; its plugin version is `0.21.1-6`.
+`gradle.properties` keeps the upstream base in `pluginVersion` and a monotonic
+local package counter in `pluginBuild`. Increase the counter for the next local
+package. The diagnostic and patch-name suffixes are no longer part of the version.
+
+The work branch includes the signed documentation updates from UP-044
+(`41f08b00`) and UP-055 (`bc613d84`). Runtime code is unchanged from patched5.
+`buildPlugin` passed against the installed IDEA 262 SDK; the ZIP CRC and embedded
+plugin descriptor were verified. Build log: `build/investigations/build6-20261016/gradle.log`.
+
 # Upstream and review refresh — patched5 (2026-10-16)
 
 Package: `0.21.1-SNAPSHOT-workspace-diagnostics-patched5`, for IDEA 262.

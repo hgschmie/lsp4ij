@@ -22,7 +22,7 @@ plugins {
 }
 
 group = prop("pluginGroup")
-version = prop("pluginVersion")
+version = "${prop("pluginVersion")}-${prop("pluginBuild")}"
 
 val lsp4jVersion = prop("lsp4jVersion")
 val lsp4jDebugVersion = prop("lsp4jDebugVersion")
