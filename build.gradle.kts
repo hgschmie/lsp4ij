@@ -24,7 +24,7 @@ plugins {
 }
 
 group = prop("pluginGroup")
-version = prop("pluginVersion")
+version = "${prop("pluginVersion")}-${prop("pluginBuild")}"
 
 val lsp4jVersion = prop("lsp4jVersion")
 val lsp4jDebugVersion = prop("lsp4jDebugVersion")
@@ -56,11 +56,8 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        // Disabling the installer dependency since IntelliJ 253 (2025.3.x) and potentially other
-        // early access/snapshot versions may lack direct installer packages in the artifact repositories.
-        create(properties("platformType"), properties("platformVersion")) {
-            useInstaller = false
-        }
+        // Local Factorio builds use the installed IDEA 262 SDK.
+        local(providers.gradleProperty("ideaPath").get())
 
         // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
         // starting from 2024.3, all json related code is know on its own plugin
@@ -74,6 +71,7 @@ dependencies {
         }
         println("use bundled Plugins: $platformBundledPlugins")
         bundledPlugins(platformBundledPlugins)
+        bundledPlugin("intellij.structureView.plugin")
 
         // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file for plugin from JetBrains Marketplace.
         plugins(properties("platformPlugins").map { it.split(',') })
@@ -118,7 +116,7 @@ dependencies {
 // Output compatibility and API usage are restricted to Java 17 in the tasks below.
 kotlin {
     jvmToolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(providers.gradleProperty("buildJavaVersion").orElse("21").get().toInt())
     }
 }
 
@@ -158,8 +156,7 @@ intellijPlatform {
             }
         }
 
-        // Change notes are maintained in plugin.xml, not rendered from CHANGELOG.md by the Changelog plugin
-        changeNotes = provider { null }
+        changeNotes = "Local IDEA 262 build on upstream/main ef2b18c3. Production source is unmodified upstream, including merged workspace diagnostics and diagnostic cache notifications. Includes per-file matching reuse, bounded rechecks and transient-error recovery."
 
         ideaVersion {
             sinceBuild = properties("pluginSinceBuild")
@@ -284,5 +281,13 @@ tasks {
 
     check {
         dependsOn(jacocoTestReport)
+    }
+}
+
+// IDEA 262 loads its filesystem provider from a separate boot jar.
+if (providers.gradleProperty("ideaPath").isPresent) {
+    tasks.test {
+        systemProperty("idea.load.plugins.id", "com.redhat.devtools.lsp4ij")
+        jvmArgs("-Xbootclasspath/a:" + file(providers.gradleProperty("ideaPath").get()).resolve("Contents/lib/nio-fs.jar"))
     }
 }
