@@ -156,7 +156,7 @@ intellijPlatform {
             }
         }
 
-        changeNotes = "Local IDEA 262 build 14 on upstream/main ef2b18c3. Fixes parameter popup crashes and stale rows when signature overloads change. Retains DAP executor routing and upstream workspace diagnostics."
+        changeNotes = "Local IDEA 262 build 15 on upstream/main ef2b18c3. Fixes parameter popup crashes, changed overload rows and stale metadata for duplicate signature labels. Retains DAP executor routing and upstream workspace diagnostics."
 
         ideaVersion {
             sinceBuild = properties("pluginSinceBuild")

@@ -1,4 +1,23 @@
-# Current local package — build 14 (2026-10-21)
+# Current local package — build 15 (2026-10-21)
+
+Package: `lsp4ij-0.21.1-SNAPSHOT-15.zip`. Retains build14's upstream base and
+fixes; adds UP-104 follow-up `03eeb51d` from PR #1756.
+
+Duplicate overload labels now require matching metadata before popup rows can
+be reused. Changed parameters or per-signature active parameters refresh these
+ambiguous rows. Unique-label metadata still updates in place, and unchanged
+duplicate rows retain the current controller.
+
+Both changed public overrides and all three internal helpers have concise
+Javadoc describing their contracts. The unusual fixed-size test context is
+also documented; a malformed class link and contradictory inline comment were
+corrected. All 31 focused tests, Javadoc/Doclint and local CodeRabbit pass on
+the contribution; all 31 tests also pass on the integrated work branch.
+Integration/package evidence lives under
+`build/investigations/build15-20261021/`; workspace receipt:
+`upstream/memory/LSP4IJ_BUILD15_2026-10-21.md`.
+
+# Previous package — build 14 (2026-10-21)
 
 Package: `lsp4ij-0.21.1-SNAPSHOT-14.zip`. Based on upstream/main `ef2b18c3`,
 retaining local IDEA 262 build settings and UP-098 DAP executor routing,
