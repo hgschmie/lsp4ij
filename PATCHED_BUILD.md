@@ -1,4 +1,19 @@
-# Current local package — build 12 (2026-10-20)
+# Current local package — build 13 (2026-10-20)
+
+Package: `lsp4ij-0.21.1-SNAPSHOT-13.zip`. Includes UP-098
+`fix/dap-executor-routing` on the build12 baseline. Generic DAP configurations
+accept Run and Debug; adapter factories must explicitly opt into custom
+executors such as Factorio Lua profiling. This prevents unrelated DAP sessions
+from claiming the Factorio Profile action. The default factory and the
+configuration without a registered factory follow the same policy.
+
+All 55 DAP tests passed, including generic rejection and custom-factory opt-in.
+The contribution's local CodeRabbit review against upstream/main completed with
+zero findings. Evidence: `build/logs/dap-routing-build13.log` and
+`build/test-results/dap-routing-build13/`. The contribution and integration remain
+local; no upstream PR or push. FDE requires this package for profiler routing.
+
+# Previous package — build 12 (2026-10-20)
 
 Package: `lsp4ij-0.21.1-SNAPSHOT-12.zip`, with the same embedded plugin version.
 The complete upstream version remains `pluginVersion=0.21.1-SNAPSHOT`;
