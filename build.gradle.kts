@@ -156,7 +156,7 @@ intellijPlatform {
             }
         }
 
-        changeNotes = "Local IDEA 262 build on upstream/main ef2b18c3. Production source is unmodified upstream, including merged workspace diagnostics and diagnostic cache notifications. Includes per-file matching reuse, bounded rechecks and transient-error recovery."
+        changeNotes = "Local IDEA 262 build 14 on upstream/main ef2b18c3. Fixes parameter popup crashes and stale rows when signature overloads change. Retains DAP executor routing and upstream workspace diagnostics."
 
         ideaVersion {
             sinceBuild = properties("pluginSinceBuild")

@@ -1,4 +1,22 @@
-# Current local package — build 13 (2026-10-20)
+# Current local package — build 14 (2026-10-21)
+
+Package: `lsp4ij-0.21.1-SNAPSHOT-14.zip`. Based on upstream/main `ef2b18c3`,
+retaining local IDEA 262 build settings and UP-098 DAP executor routing,
+including its latest runner-identity regression. Adds UP-104 from signed/DCO
+`aa6b3155`, integration `5d6e6efe`.
+
+The parameter popup is recreated when the server changes its overload rows.
+This avoids an out-of-bounds update when the list grows and stale rows when it
+shrinks or changes order. Deferred refreshes check popup identity, the latest
+reply, caret and document stamp before replacing the controller.
+
+UP-104 is draft [PR #1756](https://github.com/redhat-developer/lsp4ij/pull/1756).
+Its 27 focused tests and local CodeRabbit review pass. All 156 combined
+signature-help, DAP and diagnostic tests pass (zero failures, errors or skips).
+Package validation is recorded under `build/investigations/build14-20261021/`; workspace receipt:
+`upstream/memory/LSP4IJ_BUILD14_2026-10-21.md`. No internal CodeRabbit review.
+
+# Previous package — build 13 (2026-10-20)
 
 Package: `lsp4ij-0.21.1-SNAPSHOT-13.zip`. Includes UP-098
 `fix/dap-executor-routing` on the build12 baseline. Generic DAP configurations
