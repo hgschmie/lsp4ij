@@ -63,7 +63,7 @@ public class WillRenameFilesMoveHandler extends MoveFileHandler {
     }
 
     @Override
-    public void retargetUsages(List<UsageInfo> usageInfos, Map<PsiElement, PsiElement> oldToNewMap) {
+    public void retargetUsages(List<? extends UsageInfo> usageInfos, Map<PsiElement, PsiElement> oldToNewMap) {
     }
 
     @Override

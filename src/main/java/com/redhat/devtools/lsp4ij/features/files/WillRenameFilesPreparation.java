@@ -101,7 +101,7 @@ public final class WillRenameFilesPreparation {
      *
      * @param elements the elements the refactoring was invoked on
      */
-    void sendAndAwait(@NotNull List<PsiElement> elements) {
+    void sendAndAwait(@NotNull List<? extends PsiElement> elements) {
         var refactored = new HashSet<>(elements);
         List<FileRenamePlan> renames;
         synchronized (plans) {

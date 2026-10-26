@@ -3,7 +3,10 @@
 Package: `lsp4ij-0.21.1-SNAPSHOT-16.zip`, preserving the full upstream SNAPSHOT
 version and separate local pluginBuild16. Frozen upstream is
 `42f1f16e2357d85d733c1635d8d4f6097f8d983d`,31 commits after the build15 base.
-Production `src/main` is exactly upstream; no local runtime fix is replayed.
+Production method bodies are upstream; no local runtime fix is replayed. Three
+generic list declarations adapt the new rename handlers and their read-only
+preparation helper to IDEA262's wildcard SDK parameters; JVM erasures stay the
+same. These are explicit source compatibility exceptions to whole-tree equality.
 
 UP-098/#1753 and UP-104/#1756 are now supplied upstream. Four source patches and
 five complete production/test blobs match exactly, with33 named regressions.

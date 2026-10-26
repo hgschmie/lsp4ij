@@ -23,7 +23,7 @@ import java.util.List;
 public class WillRenameFilesRefactoringHelper implements RefactoringHelper<Void> {
 
     @Override
-    public Void prepareOperation(UsageInfo @NotNull [] usages, @NotNull List<@NotNull PsiElement> elements) {
+    public Void prepareOperation(UsageInfo @NotNull [] usages, @NotNull List<? extends @NotNull PsiElement> elements) {
         if (!elements.isEmpty()) {
             WillRenameFilesPreparation.getInstance(elements.get(0).getProject()).sendAndAwait(elements);
         }
