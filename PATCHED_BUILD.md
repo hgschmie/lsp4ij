@@ -23,14 +23,27 @@ completion SDK adaptation. Upstream build-tool versions remain unchanged.
 New upstream behavior includes DAP launch errors, invalidation/stack reload,
 pause, exception hints/conditions, logpoints, breakpoint stop handling, hexadecimal
 values, variable paging/lazy loading and rename-refactoring preparation fixes.
-Fresh full checks, supplied33 named regressions, source equivalence, package
-integrity and private FDE DAP/profile/native gates are pending. No release
-clearance or test reuse is inferred from supplier/source equality alone.
+All production/test classes compile on IDEA262/JDK25. The fresh full suite runs
+819 tests:775 pass,41 inherited assertions fail,0 errors,3 pre-existing @Ignore
+skips. This is not a green full check. Two old15 same-environment controls run97
+tests across all12 failing classes and reproduce exactly the same41 failure IDs;
+all97 paired outcomes match. Forty messages match exactly; the PHP quote-set
+failure prints the same extra-backtick set in a different iteration order. No
+assertions or expectations are changed. Full raw and matched control reports remain.
+
+All33 supplied regressions and all91 tests in16 changed upstream classes pass,
+covering new DAP and rename behavior. Project configuration verification returns0
+with retained Java17/Kotlin1.9 target-level advisories versus SDK25/2.4. Three
+inline-completion skips have unchanged original unstable-together annotations.
+Package integrity and private FDE DAP/profile/native/unit gates remain pending;
+these bounded inherited limits must remain explicit in final delivery.
 
 Reviewed source manifest SHA-256:
 `9aa882beae84c9bcbb89a12fc5099e58a2f7e86fedfe2084c14df2499e25e818`.
 Evidence under `build/investigations/analyzer-lsp-refresh-20261026/` and workspace
 `memory/findings/F-20261026-120748-analyzer-lsp-upstream-refresh/`.
+SDK compatibility addendum SHA-256:
+`84d209a84f0e7e41e9c761a57086d6ef73fc67048a0d164d3f70636a09e0bd70`.
 No CodeRabbit on merged/archive/internal work. No IDE installation.
 
 # Previous local package — build 15 (2026-10-21)
