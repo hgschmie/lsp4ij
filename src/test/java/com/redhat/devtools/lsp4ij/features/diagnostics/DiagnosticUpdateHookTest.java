@@ -76,6 +76,19 @@ public class DiagnosticUpdateHookTest extends UsefulTestCase {
         assertTrue(reports.get(reports.size()-1).isEmpty());
     }
 
+    public void testProviderUnregistrationNotifiesRetainedCache() {
+        var file = myFixture.addFileToProject("unregistered.lua", "value").getVirtualFile();
+        var retained = warning("retained");
+        wrapper.updateDiagnostics(file, "other", List.of(retained), null);
+        wrapper.updateDiagnostics(file, LSPDocumentBase.PULL_DIAGNOSTIC_IDENTIFIER,
+                List.of(warning("removed")), null);
+        assertEquals(2, reports.get(reports.size() - 1).size());
+        wrapper.clearClosedDocumentDiagnostics(null);
+        assertEquals(List.of(retained), reports.get(reports.size() - 1));
+        wrapper.clearClosedDocumentDiagnostics("other");
+        assertTrue(reports.get(reports.size() - 1).isEmpty());
+    }
+
     public void testProviderRemovalNotifiesOpenCacheWithoutChangingMappingLossCleanup() {
         var file = myFixture.configureByText("open.lua", "value").getVirtualFile();
         var removed = warning("workspace");
