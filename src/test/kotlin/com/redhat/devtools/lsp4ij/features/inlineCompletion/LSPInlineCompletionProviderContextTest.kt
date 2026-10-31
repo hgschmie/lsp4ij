@@ -84,7 +84,7 @@ class LSPInlineCompletionProviderContextTest : LSPCompletionFixtureTestCase("*.i
 
     private fun lookupRequest(): InlineCompletionRequest {
         val lookup = myFixture.lookup
-        val event = InlineCompletionEvent.LookupChange(LookupEvent(lookup, lookup.currentItem, ' '))
+        val event = InlineCompletionEvent.LookupChange(myFixture.editor, LookupEvent(lookup, lookup.currentItem, ' '))
         return event.toRequest()!!
     }
 }
